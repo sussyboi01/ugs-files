@@ -1,0 +1,61 @@
+name: Rename HTML Files Sequentially
+
+on:
+  workflow_dispatch:   # Run manually from Actions tab
+  push:
+    branches:
+      - main
+
+jobs:
+  rename-html:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Rename HTML files and generate JSON
+        run: |
+          shopt -s nullglob
+
+          count=1
+          json_output="["
+
+          for file in *.html; do
+            original_name=$(basename "$file" .html)
+
+            # Remove CL at beginning (case-insensitive)
+            cleaned_name=$(echo "$original_name" | sed -E 's/^[Cc][Ll]//')
+
+            # Replace - and _ with spaces
+            cleaned_name=$(echo "$cleaned_name" | sed -E 's/[-_]+/ /g')
+
+            # Capitalize each word
+            formatted_name=$(echo "$cleaned_name" | awk '{for(i=1;i<=NF;i++){$i=toupper(substr($i,1,1)) tolower(substr($i,2))}}1')
+
+            # Rename file
+            new_name="$count.html"
+            git mv "$file" "$new_name"
+
+            # Append JSON entry
+            json_output="$json_output
+              {\"id\": $count, \"name\": \"$formatted_name\"},"
+
+            count=$((count + 1))
+          done
+
+          # Remove trailing comma
+          json_output=$(echo "$json_output" | sed '$ s/,$//')
+
+          json_output="$json_output
+          ]"
+
+          echo "$json_output" > files.json
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Renamed HTML files and generated files.json"
+          git push
